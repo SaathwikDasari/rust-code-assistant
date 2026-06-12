@@ -1,35 +1,23 @@
-use std::fs;
-use walkdir::WalkDir;
+mod indexer;
 
-#[derive(Debug)]
-struct CodeFile {
-    path: String,
-    contents: String,
-}
+use indexer::chunker::chunk_file;
+use indexer::scanner::scan_project;
 
 fn main() {
-    let mut files: Vec<CodeFile> = Vec::new();
-
-    for entry in WalkDir::new(".").into_iter().filter_entry(|e| {
-        let name = e.file_name().to_string_lossy();
-        name != "target" && name != ".git"
-    }) {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(_) => continue,
-        };
-
-        if entry.path().extension().and_then(|e| e.to_str()) == Some("rs") {
-            if let Ok(content) = fs::read_to_string(entry.path()) {
-                files.push(CodeFile {
-                    path: entry.path().display().to_string(),
-                    contents: content,
-                })
-            }
-        }
-    }
+    let files = scan_project(".");
+    let mut all_chunks = Vec::new();
 
     for file in &files {
-        println!("Found: {} ({} bytes)", file.path, file.contents.len());
+        let chunks = chunk_file(&file.path, &file.content);
+        all_chunks.extend(chunks);
+    }
+
+    for chunk in &all_chunks {
+        println!(
+            "{} :: fn {} (lines {}-{})",
+            chunk.file_path, chunk.fn_name, chunk.start_line, chunk.end_line
+        );
+
+        println!("---\n{}\n---\n", chunk.content);
     }
 }
