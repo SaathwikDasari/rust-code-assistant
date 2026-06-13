@@ -1,6 +1,8 @@
+mod database;
 mod embeddings;
 mod indexer;
 
+use database::sqlite::{init_db, insert_chunk};
 use embeddings::embedder::Embedder;
 use indexer::chunker::chunk_file;
 use indexer::scanner::scan_project;
@@ -20,15 +22,13 @@ fn main() {
     );
 
     let embedder = Embedder::new();
+    let conn = init_db("chunks.db");
 
     for chunk in &all_chunks {
         let vector = embedder.embed(&chunk.content);
-        println!(
-            "{} :: fn {} -> embedding dim = {}, first values = {:?}",
-            chunk.file_path,
-            chunk.fn_name,
-            vector.len(),
-            &vector[..5.min(vector.len())]
-        );
+        insert_chunk(&conn, chunk, &vector);
+        println!("Stored: {} :: fn {}", chunk.file_path, chunk.fn_name);
     }
+
+    println!("Done. {} chunks stored in chunks.db", all_chunks.len());
 }
