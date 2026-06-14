@@ -1,13 +1,16 @@
 mod database;
 mod embeddings;
 mod indexer;
+mod rag;
 mod search;
 
 use database::sqlite::{init_db, insert_chunk};
 use embeddings::embedder::Embedder;
 use indexer::chunker::chunk_file;
 use indexer::scanner::scan_project;
-use search::similarity::search;
+use rag::llm::ask_llm;
+use rag::prompt::build_prompt;
+use rag::retriever::retrieve;
 
 fn main() {
     // --- Indexing ---
@@ -35,23 +38,23 @@ fn main() {
 
     println!("Done. {} chunks stored in chunks.db\n", all_chunks.len());
 
-    // --- Search ---
+    // --- RAG ---
     let query = "How are code chunks saved to the database?";
-    println!("Query: {}\n", query);
+    println!("Question: {}\n", query);
 
-    let query_embedding = embedder.embed(query);
-    let results = search(&conn, &query_embedding, 3);
+    let results = retrieve(&conn, &embedder, query, 3);
 
-    println!("Top results:");
-    for (i, result) in results.iter().enumerate() {
+    println!("Retrieved {} chunks as context:", results.len());
+    for r in &results {
         println!(
-            "{}. {} :: fn {} (lines {}-{}) [score: {:.4}]",
-            i + 1,
-            result.file_path,
-            result.fn_name,
-            result.start_line,
-            result.end_line,
-            result.score
+            "  - {} :: fn {} [score: {:.4}]",
+            r.file_path, r.fn_name, r.score
         );
     }
+
+    let prompt = build_prompt(query, &results);
+    println!("\nAsking llama3.2...\n");
+
+    let answer = ask_llm(&prompt);
+    println!("Answer:\n{}", answer);
 }
